@@ -56,6 +56,8 @@ import google.generativeai as genai
 import faiss
 from dotenv import load_dotenv
 
+load_dotenv()
+
 
 ###############################################################################
 # LOGGING
@@ -138,8 +140,8 @@ def _get_gemini():
         if not api_key:
             raise EnvironmentError("GEMINI_API_KEY environment variable is not set.")
         genai.configure(api_key=api_key)
-        _gemini_client = genai.GenerativeModel("gemini-2.5-flash")
-        logger.info("Gemini client initialised  (gemini-1.5-flash)")
+        _gemini_client = genai.GenerativeModel("gemini-3.8-flash")
+        logger.info("Gemini client initialised  (gemini-3.8-flash)")
     return _gemini_client
 
 # FAISS — load at startup
@@ -733,12 +735,13 @@ def rag_query():
 ###############################################################################
 
 if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 5001))
     print("\n" + "=" * 60)
     print("AUDIO SEMANTIC SEGMENTATION API  (v2 — single file)")
     print("=" * 60)
-    print("  http://localhost:5000/health")
+    print(f"  http://localhost:{port}/health")
     print("  POST /api/upload   — process audio file")
     print("  POST /api/rag      — ask a question")
     print("=" * 60 + "\n")
     # OPTIMIZED: Enabled threading for concurrent request handling
-    app.run(debug=False, port=5000, host="0.0.0.0", threaded=True)
+    app.run(debug=False, port=port, host="0.0.0.0", threaded=True)

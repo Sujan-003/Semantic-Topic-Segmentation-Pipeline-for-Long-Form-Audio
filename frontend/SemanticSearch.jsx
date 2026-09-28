@@ -1,6 +1,6 @@
 import React, { useState, useRef } from "react";
 
-const API_BASE_URL = "http://localhost:5000";
+const API_BASE_URL = "http://localhost:5001";
 
 export default function SemanticSearch({ segments = [], onHighlightSegment }) {
   const [query, setQuery] = useState("");
@@ -53,7 +53,7 @@ export default function SemanticSearch({ segments = [], onHighlightSegment }) {
     } catch (err) {
       setLoading(false);
       setResponse({
-        answer: `Error: ${err.message}. Make sure the backend is running on http://localhost:5000`,
+        answer: `Error: ${err.message}. Make sure the backend is running on http://localhost:5001`,
         referenced_segments: [],
         model: "error",
         context_length: 0,

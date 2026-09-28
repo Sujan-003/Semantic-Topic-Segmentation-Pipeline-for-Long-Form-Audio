@@ -16,7 +16,7 @@ import SegmentDetails from "./SegmentDetails";
 // ─────────────────────────────────────────────
 // API CLIENT
 // ─────────────────────────────────────────────
-const API_BASE_URL = "http://localhost:5000";
+const API_BASE_URL = "http://localhost:5001";
 
 const api = {
   uploadFile: async (file) => {
@@ -266,7 +266,7 @@ const UploadZone = ({ onUpload, selectedModel = "medium.en" }) => {
     setUploading(true);
     setError("");
     setProgress(0);
-    
+
     try {
       // Simulate initial progress
       let p = 10;
@@ -300,7 +300,7 @@ const UploadZone = ({ onUpload, selectedModel = "medium.en" }) => {
       // Pass result to parent with normalized data
       const segments = (result.segments || []).map(normalizeSegment);
       const transcript = (result.transcript || []).map(item => normalizeTranscript(item, segments));
-      
+
       setTimeout(() => {
         onUpload({
           filename: file.name,
@@ -720,11 +720,11 @@ const RAGPanel = ({ onHighlightSegment, segments = [] }) => {
         sentiment: seg.sentiment,
         keywords: seg.keywords,
       }));
-      
+
       const result = await api.ragQuery(query, denormSegments);
-      
+
       setLoading(false);
-      
+
       // Stream in the answer
       let i = 0;
       const text = result.answer || "";
@@ -741,7 +741,7 @@ const RAGPanel = ({ onHighlightSegment, segments = [] }) => {
     } catch (err) {
       setLoading(false);
       setResponse({
-        answer: `Error: ${err.message}. Make sure the backend is running on http://localhost:5000`,
+        answer: `Error: ${err.message}. Make sure the backend is running on http://localhost:5001`,
         referenced_segments: [],
         model: "error",
         context_length: 0,
@@ -817,7 +817,7 @@ const RAGPanel = ({ onHighlightSegment, segments = [] }) => {
 // ─────────────────────────────────────────────
 const PerformanceDashboard = ({ performance = MOCK_PERF }) => {
   const [open, setOpen] = useState(false);
-  
+
   const stages = performance?.stages || MOCK_PERF.runtime;
   const runtimeData = Object.entries(stages).map(([k, v]) => ({ stage: k, ms: v * 1000 }));
   const totalRuntime = performance?.runtime_seconds || Object.values(stages).reduce((a, b) => a + b, 0);
@@ -1034,8 +1034,8 @@ const AnalysisView = ({ filename, transcript = [], segments = [], performance = 
       {/* Bottom controls */}
       <div className="flex-shrink-0 grid grid-cols-1 lg:grid-cols-2 gap-4">
         <PerformanceDashboard performance={performance} />
-        <AdvancedControls 
-          onReset={onReset} 
+        <AdvancedControls
+          onReset={onReset}
           selectedModel={selectedModel}
           onModelChange={onModelChange}
           transcript={displayTranscript}
@@ -1144,8 +1144,8 @@ export default function App() {
         {phase === PHASES.ANALYSIS && (
           <div className="flex-1 flex flex-col overflow-hidden px-4 sm:px-6 py-6">
             <div className="max-w-screen-2xl w-full mx-auto h-full flex flex-col gap-6 overflow-hidden">
-              <AnalysisView 
-                filename={filename} 
+              <AnalysisView
+                filename={filename}
                 transcript={analysisData?.transcript || []}
                 segments={analysisData?.segments || []}
                 performance={analysisData?.performance || {}}

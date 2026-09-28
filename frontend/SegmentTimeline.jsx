@@ -55,6 +55,7 @@ export default function SegmentTimeline({ segments = [], activeSegment = 0, onSe
         {/* Timeline scroll container - FIXED DIMENSIONS */}
         <div
           ref={scrollRef}
+          id="timeline-scroll"
           className="overflow-x-auto overflow-y-hidden -mx-4 px-4 scroll-smooth"
           style={{
             scrollBehavior: "smooth",
@@ -88,11 +89,11 @@ export default function SegmentTimeline({ segments = [], activeSegment = 0, onSe
 
           <div
             id="timeline-scroll"
-            className="flex gap-3 pb-2"
+            className="flex gap-3 pb-3"
             style={{
               display: "flex",
               gap: "12px",
-              paddingBottom: "8px",
+              paddingBottom: "14px",
             }}
           >
             {/* Segment blocks - UNIFORM SIZE */}
@@ -179,17 +180,10 @@ export default function SegmentTimeline({ segments = [], activeSegment = 0, onSe
           </div>
         </div>
 
-        {/* Timeline scale below */}
-        <div className="mt-4 px-2 flex justify-between text-xs text-slate-500 font-mono">
-          <span>0:00</span>
-          <span>{fmtTime(totalDuration / 3)}</span>
-          <span>{fmtTime((totalDuration * 2) / 3)}</span>
-          <span>{fmtTime(totalDuration)}</span>
-        </div>
 
-        {/* Active segment info card */}
+        {/* Active segment info card with increased vertical margin */}
         {segments[activeSegment] && (
-          <div className="mt-4 bg-slate-900/60 rounded-lg p-4 border border-slate-700/50">
+          <div className="mt-12 bg-slate-900/60 rounded-lg p-4 border border-slate-700/50">
             <div className="flex items-start justify-between gap-4">
               <div className="flex-1 min-w-0">
                 <div className="text-sm font-semibold text-slate-200 mb-1">
