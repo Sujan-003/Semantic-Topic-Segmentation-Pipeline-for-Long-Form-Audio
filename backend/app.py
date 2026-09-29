@@ -7,7 +7,7 @@ Pipeline:
 
 Improvements over v1:
   1. Audio preprocessing   — mono · 16 kHz · normalise · noise-reduce
-  2. Real RAG              — Google Gemini (gemini-1.5-flash)
+  2. Real RAG              — Google Gemini (gemini-2.5-flash)
   3. Persistent FAISS      — saved to / loaded from  faiss_index/
   4. Real perf metrics     — time.time() per stage
   5. Structured errors     — typed try/except + meaningful HTTP codes
@@ -28,6 +28,7 @@ Environment:
 import os
 import sys
 import re
+import json
 import time
 import logging
 import tempfile
@@ -84,6 +85,7 @@ CORS(app)
 UPLOAD_FOLDER       = os.path.join(tempfile.gettempdir(), "audio_uploads")
 ALLOWED_EXTENSIONS  = {"mp3", "wav", "m4a", "flac", "ogg", "webm"}
 MAX_FILE_SIZE       = 100 * 1024 * 1024          # 100 MB
+MAX_AUDIO_DURATION  = 3 * 3600                   # 3 hours (in seconds)
 TARGET_SR           = 16_000                      # Whisper wants 16 kHz
 FAISS_INDEX_DIR     = os.path.join(os.path.dirname(__file__), "faiss_index")
 FAISS_INDEX_PATH    = os.path.join(FAISS_INDEX_DIR, "segments.index")
@@ -132,6 +134,7 @@ logger.info("Sentiment model loaded  (cardiffnlp/twitter-roberta-base-sentiment)
 
 # Gemini — lazy init
 _gemini_client = None
+_gemini_title_client = None
 
 def _get_gemini():
     global _gemini_client
@@ -140,9 +143,20 @@ def _get_gemini():
         if not api_key:
             raise EnvironmentError("GEMINI_API_KEY environment variable is not set.")
         genai.configure(api_key=api_key)
-        _gemini_client = genai.GenerativeModel("gemini-3.8-flash")
-        logger.info("Gemini client initialised  (gemini-3.8-flash)")
+        _gemini_client = genai.GenerativeModel("gemini-3.5-flash-lite")
+        logger.info("Gemini client initialised  (gemini-3.5-flash-lite)")
     return _gemini_client
+
+def _get_title_gemini():
+    global _gemini_title_client
+    if _gemini_title_client is None:
+        api_key = os.environ.get("GEMINI_API_KEY")
+        if not api_key:
+            raise EnvironmentError("GEMINI_API_KEY environment variable is not set.")
+        genai.configure(api_key=api_key)
+        _gemini_title_client = genai.GenerativeModel("gemini-3.5-flash-lite")
+        logger.info("Gemini title client initialised  (gemini-3.5-flash-lite)")
+    return _gemini_title_client
 
 # FAISS — load at startup
 _faiss_index = None
@@ -176,11 +190,14 @@ def validate_audio_file(filepath):
         raise ValueError(f"File too large: {size / (1024*1024):.1f} MB (limit {MAX_FILE_SIZE // (1024*1024)} MB).")
     try:
         info = sf.info(filepath)
-        if info.duration == 0:
-            raise ValueError("Audio file has zero duration.")
-        logger.info(f"[VALIDATE] OK  duration={info.duration:.1f}s  channels={info.channels}  sr={info.samplerate}")
     except Exception as e:
         raise ValueError(f"File is not a valid audio file or is corrupted: {e}")
+
+    if info.duration == 0:
+        raise ValueError("Audio file has zero duration.")
+    if info.duration > MAX_AUDIO_DURATION:
+        raise ValueError(f"Audio duration ({info.duration / 60:.1f} min) exceeds maximum limit of {MAX_AUDIO_DURATION // 60} min.")
+    logger.info(f"[VALIDATE] OK  duration={info.duration:.1f}s  channels={info.channels}  sr={info.samplerate}")
 
 
 def preprocess_audio(input_path):
@@ -289,10 +306,17 @@ def _moving_average(data, k=3):
 def segment_topics(transcript_data, embeddings):
     logger.info("[SEGMENTATION] Detecting topic boundaries")
     try:
+        if len(transcript_data) <= 1 or len(embeddings) <= 1:
+            logger.info("[SEGMENTATION] Single sentence / short transcript — returning single segment")
+            return [0, len(transcript_data)], np.array([])
+
         sims = np.array([
             float(cosine_similarity([embeddings[i]], [embeddings[i + 1]])[0][0])
             for i in range(len(embeddings) - 1)
         ])
+        if len(sims) == 0:
+            return [0, len(transcript_data)], sims
+
         smoothed = _moving_average(sims, k=3)
         threshold = np.percentile(smoothed, 20)
         raw_bounds = [i + 1 for i, s in enumerate(smoothed) if s < threshold]
@@ -367,8 +391,11 @@ def build_segments(transcript_data, boundaries, similarities):
         end_time = transcript_data[e - 1]["end"]
         bsims = [similarities[i - 1] if 0 < i <= len(similarities) else 0.5 for i in [s, e]]
         confidence = float(min(1.0, max(0.5, 1.0 - min(bsims))))
+        default_title = text[:50] + ("..." if len(text) > 50 else "") if text else f"Segment {seg_idx}"
         segments.append({
             "id": seg_idx,
+            "title": default_title,
+            "label": default_title,
             "start_time": _format_timestamp(start_time),
             "end_time": _format_timestamp(end_time),
             "start_timestamp": float(start_time),
@@ -382,6 +409,127 @@ def build_segments(transcript_data, boundaries, similarities):
             "confidence": confidence,
             "sentence_count": e - s,
         })
+    return segments
+
+
+def _clean_segment_title(raw_title):
+    if not raw_title or not isinstance(raw_title, str):
+        return ""
+    clean = raw_title.strip().strip('"\'`')
+    clean = re.sub(r'^(title\s*:\s*|\d+[\.\)]\s*|[-*•]\s*)', '', clean, flags=re.IGNORECASE).strip().strip('"\'`')
+    return clean
+
+
+def generate_segment_titles(segments):
+    """
+    Generate concise semantic topic titles for existing segments using Gemini 3.7 Flash.
+    Uses BOTH the complete transcript/content and extracted keywords for each segment.
+    Falls back gracefully to transcript beginning if title generation fails or API key is not set.
+    """
+    if not segments:
+        return segments
+
+    try:
+        client = _get_title_gemini()
+    except Exception as e:
+        logger.warning(f"[TITLES] Gemini title client unavailable: {e}. Using transcript fallback titles.")
+        return segments
+
+    try:
+        if len(segments) == 1:
+            seg = segments[0]
+            transcript = seg.get("content", "").strip()
+            keywords_str = ", ".join(seg.get("keywords", []))
+            prompt = f"""Generate a concise semantic topic title for the following audio segment.
+
+Use BOTH the transcript and the extracted keywords.
+
+The transcript is the primary source of truth. Keywords are supporting context and must not override information in the transcript.
+
+Requirements:
+- 3–8 words.
+- Describe the MAIN topic or idea of the segment.
+- Capture the semantic meaning of the entire segment, not merely its opening sentence.
+- Use the keywords to help identify the central theme.
+- Use specific terminology when clearly supported by the transcript.
+- Do not invent information.
+- Do not make the title clickbait.
+- Do not simply concatenate keywords.
+- Avoid generic titles such as 'Introduction', 'Discussion', 'Topic', or 'Conclusion' unless the segment genuinely consists of that content.
+- Return ONLY the title.
+- No quotation marks.
+- No explanation.
+- No numbering.
+
+Transcript:
+{transcript}
+
+Keywords:
+{keywords_str}"""
+            logger.info("[TITLES] Generating semantic title for 1 segment via Gemini 3.7 Flash...")
+            resp = client.generate_content(prompt)
+            clean_t = _clean_segment_title(resp.text)
+            if clean_t:
+                seg["title"] = clean_t
+                seg["label"] = clean_t
+                logger.info(f"[TITLES] Generated title for segment 0: '{clean_t}'")
+        else:
+            seg_payload = [
+                {
+                    "id": s.get("id", idx),
+                    "transcript": s.get("content", "").strip(),
+                    "keywords": ", ".join(s.get("keywords", []))
+                }
+                for idx, s in enumerate(segments)
+            ]
+            prompt = f"""Generate a concise semantic topic title for each of the following audio segments.
+
+Use BOTH the transcript and the extracted keywords for each segment.
+
+The transcript is the primary source of truth. Keywords are supporting context and must not override information in the transcript.
+
+Requirements for each title:
+- 3–8 words.
+- Describe the MAIN topic or idea of the segment.
+- Capture the semantic meaning of the entire segment, not merely its opening sentence.
+- Use the keywords to help identify the central theme.
+- Use specific terminology when clearly supported by the transcript.
+- Do not invent information.
+- Do not make the title clickbait.
+- Do not simply concatenate keywords.
+- Avoid generic titles such as 'Introduction', 'Discussion', 'Topic', or 'Conclusion' unless the segment genuinely consists of that content.
+- Return ONLY a valid JSON object mapping each segment id (as integer or string key) to its semantic title string.
+- No quotation marks around titles inside the text other than JSON formatting.
+- No explanation.
+- No markdown other than the JSON block.
+
+Segments:
+{json.dumps(seg_payload, indent=2)}
+
+Example JSON output format:
+{{
+  "0": "From Computers to Human Augmentation",
+  "1": "How AlterEgo Reads Neuromuscular Signals"
+}}"""
+            logger.info(f"[TITLES] Generating batched semantic titles for {len(segments)} segments via Gemini 3.7 Flash...")
+            resp = client.generate_content(prompt)
+            text = resp.text.strip()
+            match = re.search(r'\{.*\}', text, re.DOTALL)
+            if match:
+                titles_map = json.loads(match.group(0))
+                for seg in segments:
+                    sid = seg.get("id")
+                    title_val = titles_map.get(str(sid)) or titles_map.get(sid)
+                    clean_t = _clean_segment_title(title_val)
+                    if clean_t:
+                        seg["title"] = clean_t
+                        seg["label"] = clean_t
+                        logger.info(f"[TITLES] Generated title for segment {sid}: '{clean_t}'")
+            else:
+                logger.warning(f"[TITLES] Could not parse JSON from Gemini title response: '{text[:100]}...'")
+    except Exception as e:
+        logger.warning(f"[TITLES] Gemini title generation failed: {e}. Safe fallback preserved.")
+
     return segments
 
 
@@ -538,7 +686,7 @@ def generate_rag_answer(query, retrieved_segments, max_context_chars=8000):
     return {
         "answer": answer,
         "referenced_segment_ids": ref_ids,
-        "model": "gemini-2.5-flash",
+        "model": "gemini-3.5-flash",
         "context_length": total,
     }
 
@@ -649,6 +797,13 @@ def upload_file():
     except Exception as e:
         return _err(f"Segment construction error: {e}", 500)
     perf["sentiment"] = round(time.time() - t0, 3)
+
+    t0 = time.time()
+    try:
+        segments = generate_segment_titles(segments)
+    except Exception as e:
+        logger.warning(f"[TITLES] Title generation step failed (non-fatal): {e}")
+    perf["title_generation"] = round(time.time() - t0, 3)
 
     try:
         build_faiss_index(segments)

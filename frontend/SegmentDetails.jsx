@@ -70,7 +70,7 @@ export default function SegmentDetails({
             <div className="inline-block px-2.5 py-0.5 rounded-full bg-indigo-500/20 border border-indigo-500/40 text-indigo-400 text-xs font-bold mb-2">
               SEGMENT #{segment.id}
             </div>
-            <h2 className="text-slate-100 text-xl font-bold">{segment.label}</h2>
+            <h2 className="text-slate-100 text-xl font-bold">{segment.title || segment.label}</h2>
           </div>
           <div
             className="flex-shrink-0 px-3 py-1.5 rounded-lg text-white text-sm font-bold"

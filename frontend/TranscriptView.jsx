@@ -90,7 +90,7 @@ export default function TranscriptView({
                       TOPIC {segment?.id || segId}
                     </div>
                     <div className="text-slate-500 text-xs font-mono">
-                      {segment?.label || `Segment ${segId}`}
+                      {segment?.title || segment?.label || `Segment ${segId}`}
                     </div>
                   </div>
                   <div className="flex gap-1.5">

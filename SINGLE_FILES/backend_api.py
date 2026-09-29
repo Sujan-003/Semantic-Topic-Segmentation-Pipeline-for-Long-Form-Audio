@@ -82,6 +82,7 @@ CORS(app)
 UPLOAD_FOLDER       = os.path.join(tempfile.gettempdir(), "audio_uploads")
 ALLOWED_EXTENSIONS  = {"mp3", "wav", "m4a", "flac", "ogg", "webm"}
 MAX_FILE_SIZE       = 100 * 1024 * 1024          # 100 MB
+MAX_AUDIO_DURATION  = 3 * 3600                   # 3 hours (in seconds)
 TARGET_SR           = 16_000                      # Whisper wants 16 kHz
 FAISS_INDEX_DIR     = os.path.join(os.path.dirname(__file__), "faiss_index")
 FAISS_INDEX_PATH    = os.path.join(FAISS_INDEX_DIR, "segments.index")
@@ -186,14 +187,19 @@ def validate_audio_file(filepath: str) -> None:
         )
     try:
         info = sf.info(filepath)
-        if info.duration == 0:
-            raise ValueError("Audio file has zero duration.")
-        logger.info(
-            f"[VALIDATE] OK  duration={info.duration:.1f}s  "
-            f"channels={info.channels}  sr={info.samplerate}"
-        )
     except Exception as e:
         raise ValueError(f"File is not a valid audio file or is corrupted: {e}")
+
+    if info.duration == 0:
+        raise ValueError("Audio file has zero duration.")
+    if info.duration > MAX_AUDIO_DURATION:
+        raise ValueError(
+            f"Audio duration ({info.duration / 60:.1f} min) exceeds maximum limit of {MAX_AUDIO_DURATION // 60} min."
+        )
+    logger.info(
+        f"[VALIDATE] OK  duration={info.duration:.1f}s  "
+        f"channels={info.channels}  sr={info.samplerate}"
+    )
 
 
 def preprocess_audio(input_path: str) -> str:
@@ -344,12 +350,19 @@ def segment_topics(
     """
     logger.info("[SEGMENTATION] Detecting topic boundaries")
     try:
+        if len(transcript_data) <= 1 or len(embeddings) <= 1:
+            logger.info("[SEGMENTATION] Single sentence / short transcript — returning single segment")
+            return [0, len(transcript_data)], np.array([])
+
         sims = np.array(
             [
                 float(cosine_similarity([embeddings[i]], [embeddings[i + 1]])[0][0])
                 for i in range(len(embeddings) - 1)
             ]
         )
+        if len(sims) == 0:
+            return [0, len(transcript_data)], sims
+
         smoothed  = _moving_average(sims, k=3)
         threshold = np.percentile(smoothed, 20)
 

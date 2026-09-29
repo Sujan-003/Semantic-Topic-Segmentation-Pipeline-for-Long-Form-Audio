@@ -31,7 +31,7 @@ export default function SentimentChart({ segments = [] }) {
     name: `Seg ${seg.id}`,
     timestamp: seg.startTimestamp || 0,
     sentiment: seg.sentimentScore || 0,
-    label: seg.label || `Segment ${seg.id}`,
+    label: seg.title || seg.label || `Segment ${seg.id}`,
   }));
 
   if (chartData.length === 0) {

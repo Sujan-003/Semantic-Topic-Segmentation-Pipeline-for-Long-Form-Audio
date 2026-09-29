@@ -48,6 +48,7 @@ export default function TimelineBar({ segments = [], activeSegment, onSegmentCli
             const isActive = seg.id === activeSegment;
             const color = sentimentColor(seg.sentiment);
 
+            const segTitle = seg.title || seg.label || `Segment ${seg.id}`;
             return (
               <button
                 key={seg.id}
@@ -59,11 +60,11 @@ export default function TimelineBar({ segments = [], activeSegment, onSegmentCli
                   background: color,
                   opacity: isActive ? 1 : 0.6,
                 }}
-                title={`${seg.label} (${fmtTime(seg.startTimestamp || 0)} - ${fmtTime(seg.endTimestamp || 0)})`}
+                title={`${segTitle} (${fmtTime(seg.startTimestamp || 0)} - ${fmtTime(seg.endTimestamp || 0)})`}
               >
                 {/* Tooltip on hover */}
                 <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-slate-900 border border-slate-600 rounded text-xs text-slate-300 whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-10 shadow-lg">
-                  {seg.label?.slice(0, 20)}...
+                  {segTitle.slice(0, 20)}...
                 </div>
 
                 {/* Segment border for active */}
@@ -87,6 +88,7 @@ export default function TimelineBar({ segments = [], activeSegment, onSegmentCli
           {segments.map((seg) => {
             const isActive = seg.id === activeSegment;
             const color = sentimentColor(seg.sentiment);
+            const segTitle = seg.title || seg.label || `Segment ${seg.id}`;
             return (
               <div
                 key={seg.id}
@@ -102,7 +104,7 @@ export default function TimelineBar({ segments = [], activeSegment, onSegmentCli
                   style={{ background: color }}
                 />
                 <span className="text-xs text-slate-300 flex-1 truncate">
-                  {seg.label?.slice(0, 30) || `Segment ${seg.id}`}
+                  {segTitle.slice(0, 30)}
                 </span>
                 <span className="text-xs text-slate-500 font-mono whitespace-nowrap">
                   {fmtTime(seg.startTimestamp || 0)} - {fmtTime(seg.endTimestamp || 0)}

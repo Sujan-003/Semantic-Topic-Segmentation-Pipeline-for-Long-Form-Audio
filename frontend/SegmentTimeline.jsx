@@ -102,7 +102,8 @@ export default function SegmentTimeline({ segments = [], activeSegment = 0, onSe
               const color = sentimentColor(segment.sentiment);
               const startTime = fmtTime(segment.startTimestamp || segment.startTime || 0);
               const endTime = fmtTime(segment.endTimestamp || segment.endTime || 0);
-              const preview = segment.label?.slice(0, 25) || `Segment ${segment.id}`;
+              const titleText = segment.title || segment.label || `Segment ${segment.id}`;
+              const preview = titleText.slice(0, 25);
 
               return (
                 <button
@@ -125,7 +126,7 @@ export default function SegmentTimeline({ segments = [], activeSegment = 0, onSe
                     flexShrink: 0,
                     borderColor: isActive ? color : undefined,
                   }}
-                  title={`${segment.label} (${startTime} - ${endTime})`}
+                  title={`${titleText} (${startTime} - ${endTime})`}
                 >
                   {/* Segment number */}
                   <div className="text-xs font-bold text-slate-300 font-mono mb-1">
@@ -163,7 +164,7 @@ export default function SegmentTimeline({ segments = [], activeSegment = 0, onSe
 
                   {/* Hover tooltip */}
                   <div className="absolute -top-24 left-1/2 transform -translate-x-1/2 px-3 py-2 bg-slate-950 border border-slate-600 rounded-lg text-xs text-slate-200 whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50 shadow-xl">
-                    <div className="font-mono font-semibold mb-1">{segment.label}</div>
+                    <div className="font-mono font-semibold mb-1">{titleText}</div>
                     <div className="text-slate-400 text-xs mb-0.5">
                       {startTime} → {endTime}
                     </div>
@@ -187,7 +188,7 @@ export default function SegmentTimeline({ segments = [], activeSegment = 0, onSe
             <div className="flex items-start justify-between gap-4">
               <div className="flex-1 min-w-0">
                 <div className="text-sm font-semibold text-slate-200 mb-1">
-                  {segments[activeSegment].label}
+                  {segments[activeSegment].title || segments[activeSegment].label}
                 </div>
                 <div className="text-xs text-slate-500 font-mono mb-2">
                   {fmtTime(segments[activeSegment].startTimestamp || segments[activeSegment].startTime || 0)} - {fmtTime(segments[activeSegment].endTimestamp || segments[activeSegment].endTime || 0)}

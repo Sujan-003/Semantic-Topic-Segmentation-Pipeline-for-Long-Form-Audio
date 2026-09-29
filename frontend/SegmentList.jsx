@@ -64,7 +64,7 @@ export default function SegmentList({ segments = [], activeSegment, onSegmentCli
 
               {/* Segment title */}
               <div className="text-slate-200 text-sm font-semibold mb-2 truncate">
-                {seg.label || `Segment ${seg.id}`}
+                {seg.title || seg.label || `Segment ${seg.id}`}
               </div>
 
               {/* Time range */}

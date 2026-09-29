@@ -53,7 +53,8 @@ const api = {
 // ─────────────────────────────────────────────
 const normalizeSegment = (seg) => ({
   id: seg.id ?? 0,
-  label: seg.label ?? seg.content?.slice(0, 50) ?? "Untitled",
+  title: seg.title ?? seg.label ?? seg.content?.slice(0, 50) ?? "Untitled",
+  label: seg.title ?? seg.label ?? seg.content?.slice(0, 50) ?? "Untitled",
   startTime: seg.start_time ?? seg.start ?? "00:00:00",
   endTime: seg.end_time ?? seg.end ?? "00:00:00",
   startTimestamp: seg.start_timestamp ?? seg.start ?? 0,
@@ -536,7 +537,7 @@ const SegmentModal = ({ segment, onClose, onKeywordClick, highlightedKeyword }) 
   const [cpd, setCpd] = useState(false);
 
   const exportText = () => {
-    const text = `Topic: ${segment.label}\nSentiment: ${segment.sentiment}\nConfidence: ${(segment.confidence * 100).toFixed(0)}%\n\nSummary:\n${segment.summary.map(s => `• ${s}`).join("\n")}\n\nKeywords: ${segment.keywords.join(", ")}`;
+    const text = `Topic: ${segment.title || segment.label}\nSentiment: ${segment.sentiment}\nConfidence: ${(segment.confidence * 100).toFixed(0)}%\n\nSummary:\n${segment.summary.map(s => `• ${s}`).join("\n")}\n\nKeywords: ${segment.keywords.join(", ")}`;
     navigator.clipboard?.writeText(text);
     setCpd(true); setTimeout(() => setCpd(false), 1500);
   };
@@ -550,7 +551,7 @@ const SegmentModal = ({ segment, onClose, onKeywordClick, highlightedKeyword }) 
               <Badge color="#6366f1">SEG {segment.id}</Badge>
               <Badge color={sc}>{segment.sentiment.toUpperCase()}</Badge>
             </div>
-            <h3 className="text-slate-100 text-lg font-semibold">{segment.label}</h3>
+            <h3 className="text-slate-100 text-lg font-semibold">{segment.title || segment.label}</h3>
           </div>
           <button onClick={onClose} className="text-slate-500 hover:text-slate-300 text-xl leading-none mt-1">✕</button>
         </div>
@@ -675,7 +676,7 @@ const SegmentsPanel = ({ activeSegment, onSegmentClick, onModalOpen, highlighted
                   {(seg.confidence * 100).toFixed(0)}%
                 </span>
               </div>
-              <div className="text-slate-200 text-sm font-medium mb-2">{seg.label}</div>
+              <div className="text-slate-200 text-sm font-medium mb-2">{seg.title || seg.label}</div>
               <div className="flex gap-4 text-xs text-slate-500 font-mono mb-3">
                 <span>{seg.wordCount}w</span>
                 <span>{seg.duration}</span>
